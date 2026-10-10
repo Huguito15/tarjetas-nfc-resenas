@@ -24,7 +24,7 @@ Abre http://localhost:3000. Otros comandos: `npm run build` (compilación de pro
 
 | Qué | Archivo |
 | --- | --- |
-| Nombre de la marca, textos SEO, datos legales | `src/config/site.ts` |
+| Nombre de la marca, WhatsApp, textos SEO, datos legales | `src/config/site.ts` |
 | Productos, precios, packs, FAQ, pasos, galería | `src/data/content.ts` |
 | Fotos de los modelos | `src/assets/modelos/` (y registrarlas en `src/data/content.ts`) |
 | Colores y animaciones | `src/app/globals.css` (tokens `:root` y `.dark`) |
@@ -39,7 +39,7 @@ Copia `.env.example` como `.env.local` (en local) o añádelas en Vercel (**Sett
 | Variable | Para qué sirve |
 | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | URL pública (SEO). En Vercel, si no la pones, se usa el dominio de producción. |
-| `NEXT_PUBLIC_WHATSAPP_NUMBER` | Número con prefijo, sin `+` ni espacios (ej. `34600111222`). Activa los botones de WhatsApp. |
+| `NEXT_PUBLIC_WHATSAPP_NUMBER` | Opcional: sustituye al número de WhatsApp de `src/config/site.ts` (con prefijo, sin `+` ni espacios). |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | Correo de contacto visible y alternativa de envío. |
 | `ORDER_WEBHOOK_URL` | (Privada) URL que recibe cada solicitud del formulario en JSON. |
 
@@ -48,7 +48,7 @@ Copia `.env.example` como `.env.local` (en local) o añádelas en Vercel (**Sett
 El formulario **nunca simula un envío**. Usa el primer canal disponible:
 
 1. **`ORDER_WEBHOOK_URL` configurada** → la solicitud se envía desde el servidor (`/api/pedido`) y se confirma al cliente solo si el webhook responde correctamente. Opciones gratuitas: [Formspree](https://formspree.io) (pega la URL del formulario, tipo `https://formspree.io/f/xxxx`), Make, Zapier, n8n o un webhook de Slack/Discord.
-2. **Solo WhatsApp** → abre WhatsApp con el pedido ya redactado; el cliente debe pulsar «Enviar».
+2. **WhatsApp** (configurado por defecto) → abre WhatsApp con el pedido ya redactado; el cliente debe pulsar «Enviar».
 3. **Solo correo** → abre la aplicación de correo con el pedido redactado.
 4. **Nada configurado** → avisa de que el envío aún no está activo y de que la solicitud no se ha enviado.
 
@@ -84,5 +84,5 @@ Cada `git push` a `main` vuelve a publicar la web automáticamente. Para usar tu
 
 - Cambia el nombre provisional **«NFC Reseñas»** en `src/config/site.ts`.
 - Completa los datos legales de `siteConfig.legal` y revisa la plantilla de `/privacidad`.
-- Configura al menos un canal de contacto (WhatsApp, correo o webhook).
+- WhatsApp ya está configurado. Si quieres recibir los pedidos también por correo o en un servicio externo, configura `NEXT_PUBLIC_CONTACT_EMAIL` u `ORDER_WEBHOOK_URL`.
 - Si añades fotos nuevas, usa una buena resolución (las actuales miden 1672 × 941 px). El marco de cada foto adopta su proporción real, así que no se recortan.

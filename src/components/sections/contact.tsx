@@ -1,4 +1,4 @@
-import { Clock, Mail, MessageCircle, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, Clock, Mail, MessageCircle, ShieldCheck } from "lucide-react";
 import { products, packs } from "@/data/content";
 import { siteConfig, whatsappHref } from "@/config/site";
 import { formatPrice } from "@/lib/utils";
@@ -68,10 +68,11 @@ export function Contact({ endpointEnabled }: { endpointEnabled: boolean }) {
                     <span className="grid size-11 place-items-center rounded-xl bg-[#1fa855] text-white">
                       <MessageCircle className="size-5" />
                     </span>
-                    <span>
+                    <span className="min-w-0 flex-1">
                       <span className="block font-semibold text-fg">WhatsApp</span>
-                      <span className="block text-sm text-muted">Escríbenos y te respondemos</span>
+                      <span className="block text-sm tabular-nums text-muted">{siteConfig.whatsapp.display}</span>
                     </span>
+                    <ArrowUpRight className="size-4 shrink-0 text-subtle transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-fg" />
                   </a>
                 ) : (
                   <div className="flex items-center gap-3 rounded-2xl border border-dashed border-line-strong p-3 opacity-70">

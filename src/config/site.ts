@@ -1,11 +1,20 @@
 /**
  * Configuración general de la marca.
- * Cambia aquí el nombre comercial y los datos legales.
- * El WhatsApp y el correo se definen con variables de entorno (ver .env.example).
+ * Cambia aquí el nombre comercial, el WhatsApp y los datos legales.
+ * El WhatsApp y el correo también se pueden definir con variables de entorno (ver .env.example).
  */
 
-const whatsappNumber = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "").replace(/\D/g, "");
+/** Número de WhatsApp del negocio, con prefijo de país y sin "+" ni espacios. */
+const DEFAULT_WHATSAPP_NUMBER = "34623187656";
+
+const whatsappNumber = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER).replace(/\D/g, "");
 const contactEmail = (process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "").trim();
+
+/** "34623187656" → "+34 623 187 656" (para mostrarlo en la web). */
+function formatPhone(digits: string) {
+  if (/^34\d{9}$/.test(digits)) return `+34 ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`;
+  return digits ? `+${digits}` : "";
+}
 
 export const siteConfig = {
   /** Nombre comercial provisional: cámbialo por el de tu marca. */
@@ -24,6 +33,7 @@ export const siteConfig = {
   locale: "es_ES",
   whatsapp: {
     number: whatsappNumber,
+    display: formatPhone(whatsappNumber),
     defaultMessage: "Hola, me interesan vuestras tarjetas NFC para reseñas de Google.",
   },
   email: contactEmail,
