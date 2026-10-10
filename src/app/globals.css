@@ -1,0 +1,374 @@
+@import "tailwindcss";
+
+/* El modo oscuro se activa con la clase .dark en <html> (botón de tema). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* -------------------------------------------------------------------------- */
+/*  Tokens de diseño                                                           */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  --bg: #f5f7fb;
+  --bg-soft: #ebeff7;
+  --surface: #ffffff;
+  --surface-2: #f1f4fa;
+  --fg: #0a1020;
+  --muted: #4b5670;
+  --subtle: #7a859b;
+  --line: rgb(10 16 32 / 0.08);
+  --line-strong: rgb(10 16 32 / 0.15);
+  --accent: #1f5eff;
+  --accent-2: #0ea5e9;
+  --accent-soft: rgb(31 94 255 / 0.08);
+  --glow: rgb(31 94 255 / 0.22);
+  --grid: rgb(10 16 32 / 0.055);
+  --star: #f5b301;
+  --shadow-card: 0 1px 2px rgb(10 16 32 / 0.04), 0 14px 36px -14px rgb(10 16 32 / 0.14);
+  --shadow-glow: 0 12px 36px -12px rgb(31 94 255 / 0.55);
+  --gradient-text: linear-gradient(100deg, #0b3fd1 0%, #1f5eff 45%, #0ea5e9 100%);
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #03050b;
+  --bg-soft: #070b15;
+  --surface: #0a0f1c;
+  --surface-2: #0f1627;
+  --fg: #eef3fc;
+  --muted: #9aa6bd;
+  --subtle: #68748e;
+  --line: rgb(140 160 210 / 0.12);
+  --line-strong: rgb(140 160 210 / 0.22);
+  --accent: #3b82ff;
+  --accent-2: #5ccbff;
+  --accent-soft: rgb(59 130 255 / 0.12);
+  --glow: rgb(59 130 255 / 0.45);
+  --grid: rgb(140 170 255 / 0.065);
+  --star: #fbbf24;
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 24px 60px -24px rgb(0 0 0 / 0.8);
+  --shadow-glow: 0 12px 48px -10px rgb(59 130 255 / 0.65);
+  --gradient-text: linear-gradient(100deg, #a8d6ff 0%, #4d93ff 48%, #85b1ff 100%);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: var(--bg);
+  --color-bg-soft: var(--bg-soft);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-glow: var(--glow);
+  --color-star: var(--star);
+}
+
+@theme {
+  --animate-rise: rise 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-up: fade-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 1.2s ease-out both;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-float-slow: float 9s ease-in-out infinite;
+  --animate-marquee: marquee 45s linear infinite;
+  --animate-nfc-ring: nfc-ring 2.6s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+  --animate-pulse-dot: pulse-dot 2.2s ease-in-out infinite;
+  --animate-progress: progress linear both;
+
+  @keyframes rise {
+    from { transform: translateY(110%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes nfc-ring {
+    0% { transform: scale(0.55); opacity: 0.85; }
+    100% { transform: scale(2.3); opacity: 0; }
+  }
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 0 var(--glow); }
+    50% { box-shadow: 0 0 0 6px transparent; }
+  }
+  @keyframes progress {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Base                                                                       */
+/* -------------------------------------------------------------------------- */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  section[id] {
+    scroll-margin-top: 5rem;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Utilidades propias                                                         */
+/* -------------------------------------------------------------------------- */
+
+@utility container-page {
+  width: 100%;
+  max-width: 76rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+  @media (width >= 40rem) {
+    padding-inline: 1.75rem;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 2rem;
+  }
+}
+
+@utility text-gradient {
+  background-image: var(--gradient-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility glass {
+  background-color: color-mix(in oklab, var(--surface) 72%, transparent);
+  /* Solo la versión sin prefijo: el compilador añade -webkit- donde haga falta. */
+  backdrop-filter: blur(16px) saturate(150%);
+}
+
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+@utility mask-fade-radial {
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 35%, #000 25%, transparent 75%);
+}
+
+@utility mask-fade-x {
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+@utility shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Componentes                                                                */
+/* -------------------------------------------------------------------------- */
+
+@layer components {
+  /* Titular del hero: cada línea sube desde una máscara. */
+  .line-mask {
+    display: block;
+    overflow: hidden;
+    padding-bottom: 0.1em;
+    margin-bottom: -0.1em;
+  }
+  .line-mask > span {
+    display: inline-block;
+  }
+
+  /* Botón principal con brillo al pasar el ratón. */
+  .btn-primary {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    color: #fff;
+    background: linear-gradient(180deg, #2f6df6 0%, #1d4fd8 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.22),
+      inset 0 0 0 1px rgb(255 255 255 / 0.08),
+      var(--shadow-glow);
+  }
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.28) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .btn-primary:hover::after {
+    transform: translateX(120%);
+  }
+
+  /* Tarjeta con halo que sigue al cursor (variables --x / --y). */
+  .spotlight {
+    position: relative;
+    isolation: isolate;
+  }
+  .spotlight::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(420px circle at var(--x, 50%) var(--y, 50%), var(--accent-soft), transparent 45%);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .spotlight::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: radial-gradient(260px circle at var(--x, 50%) var(--y, 50%), var(--accent), transparent 60%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .spotlight:hover::before,
+  .spotlight:hover::after {
+    opacity: 1;
+  }
+
+  /* Borde luminoso animado para la opción recomendada. */
+  .border-beam {
+    position: relative;
+  }
+  .border-beam::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1.5px;
+    pointer-events: none;
+    background: conic-gradient(
+      from var(--beam-angle),
+      transparent 0%,
+      var(--accent) 12%,
+      var(--accent-2) 20%,
+      transparent 32%,
+      transparent 55%,
+      var(--accent) 68%,
+      transparent 82%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: beam-rotate 7s linear infinite;
+  }
+}
+
+@property --beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes beam-rotate {
+  to {
+    --beam-angle: 360deg;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Cambio de tema                                                             */
+/* -------------------------------------------------------------------------- */
+
+/* Transición circular con View Transitions (navegadores compatibles). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
+
+/* Alternativa: fundido de colores cuando no hay View Transitions. */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 0.45s ease,
+    border-color 0.45s ease,
+    color 0.45s ease,
+    fill 0.45s ease,
+    box-shadow 0.45s ease !important;
+  transition-delay: 0s !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Movimiento reducido                                                        */
+/* -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
