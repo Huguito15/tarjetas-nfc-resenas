@@ -23,8 +23,9 @@ function ModelThumb({ productId }: { productId: ProductId }) {
       <Image
         src={product.photo.image}
         alt=""
-        // Se muestra a 112 px (móvil), ~46vw (tablet) o ~300 px (escritorio).
-        sizes="(min-width: 1024px) 320px, (min-width: 640px) 46vw, 112px"
+        // Misma versión de alta resolución que la tarjeta de producto (ya descargada):
+        // en móvil la miniatura recorta la foto y necesita más píxeles de los que aparenta.
+        sizes="(max-width: 768px) 92vw, 480px"
         quality={PHOTO_QUALITY}
         className="h-full w-full object-cover transition-transform duration-500 group-hover/model:scale-105"
       />
