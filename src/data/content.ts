@@ -8,6 +8,13 @@ import expositoresNfcQr from "@/assets/modelos/expositores-nfc-qr.webp";
 /*  arriba y añádela a `gallery` (y, si procede, a un producto).               */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Calidad de compresión de las fotos de producto. Más alta que la de por
+ * defecto (75) para que los textos pequeños de las tarjetas se vean nítidos.
+ * Debe estar incluida en `images.qualities` de next.config.ts.
+ */
+export const PHOTO_QUALITY = 90;
+
 export type GalleryItem = {
   id: string;
   image: StaticImageData;

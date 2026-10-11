@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import * as m from "motion/react-m";
 import { ArrowRight, Check, Info, MessageCircle, Minus, Nfc, Plus } from "lucide-react";
-import { products, type ProductId } from "@/data/content";
+import { PHOTO_QUALITY, products, type ProductId } from "@/data/content";
 import { whatsappHref } from "@/config/site";
 import { MAX_UNITS, calculatePrice, clampQuantity, pendingCharges } from "@/lib/pricing";
 import { buildQuoteWhatsappMessage } from "@/lib/order";
@@ -23,7 +23,9 @@ function ModelThumb({ productId }: { productId: ProductId }) {
       <Image
         src={product.photo.image}
         alt=""
-        sizes="160px"
+        // Se muestra a 112 px (móvil), ~46vw (tablet) o ~300 px (escritorio).
+        sizes="(min-width: 1024px) 320px, (min-width: 640px) 46vw, 112px"
+        quality={PHOTO_QUALITY}
         className="h-full w-full object-cover transition-transform duration-500 group-hover/model:scale-105"
       />
     );

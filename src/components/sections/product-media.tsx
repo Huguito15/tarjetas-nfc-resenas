@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { ZoomIn } from "lucide-react";
-import type { GalleryItem } from "@/data/content";
+import { PHOTO_QUALITY, type GalleryItem } from "@/data/content";
 import { useLightbox } from "@/components/providers/lightbox-provider";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +30,7 @@ export function ProductPhoto({ item, className }: { item: GalleryItem; className
         alt={item.alt}
         placeholder="blur"
         sizes="(max-width: 768px) 92vw, 480px"
+        quality={PHOTO_QUALITY}
         className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover/photo:scale-[1.04]"
       />
       <span
@@ -62,6 +63,7 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
               alt={item.alt}
               placeholder="blur"
               sizes="(max-width: 768px) 92vw, 580px"
+              quality={PHOTO_QUALITY}
               className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover/tile:scale-105"
             />
             <span

@@ -5,7 +5,7 @@ import Image from "next/image";
 import * as m from "motion/react-m";
 import { AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { gallery } from "@/data/content";
+import { PHOTO_QUALITY, gallery } from "@/data/content";
 
 type LightboxContextValue = { open: (id: string) => void };
 
@@ -109,6 +109,7 @@ export function LightboxProvider({ children }: { children: React.ReactNode }) {
                     loading="eager"
                     placeholder="blur"
                     sizes="(max-width: 1200px) 92vw, 1100px"
+                    quality={PHOTO_QUALITY}
                     className="h-auto w-full"
                   />
                 </div>
