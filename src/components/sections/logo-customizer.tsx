@@ -1,19 +1,39 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { ArrowRight, CircleAlert, Download, ImageUp, Minus, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
+import {
+  ArrowRight,
+  CircleAlert,
+  Download,
+  ImageUp,
+  Minus,
+  Plus,
+  Rotate3d,
+  RotateCcw,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { products } from "@/data/content";
 import { cn, formatPrice } from "@/lib/utils";
 import {
   PANEL_RECT,
   SCENE_H,
   SCENE_W,
+  drawBackdrop,
   drawScene,
   type LogoSource,
   type StandFinish,
 } from "@/lib/stand-scene";
+import type { StandViewerApi } from "@/components/sections/stand-viewer-3d";
 import { useOrder } from "@/components/providers/order-provider";
 import { buttonStyles } from "@/components/ui/button";
+
+/** Visor 3D (Three.js): se descarga solo cuando el personalizador se acerca a la pantalla. */
+const StandViewer3D = dynamic(
+  () => import("@/components/sections/stand-viewer-3d").then((module) => module.StandViewer3D),
+  { ssr: false },
+);
 
 const ACCEPTED = ["image/png", "image/jpeg", "image/webp"];
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -80,6 +100,34 @@ export function LogoCustomizer() {
   const inputId = useId();
   const sizeId = useId();
 
+  // Vista 3D: se monta al acercarse a la sección; si no hay WebGL se queda la vista 2D.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const viewerApiRef = useRef<StandViewerApi | null>(null);
+  const [nearView, setNearView] = useState(false);
+  const [threeStatus, setThreeStatus] = useState<"pending" | "ready" | "unsupported">("pending");
+  const [interacted, setInteracted] = useState(false);
+  const threeReady = threeStatus === "ready";
+
+  const handleViewerReady = useCallback((api: StandViewerApi | null) => {
+    viewerApiRef.current = api;
+    setThreeStatus((status) => (api ? "ready" : status === "unsupported" ? status : "pending"));
+  }, []);
+  const handleUnsupported = useCallback(() => setThreeStatus("unsupported"), []);
+  const handleInteract = useCallback(() => setInteracted(true), []);
+
+  useEffect(() => {
+    const element = previewRef.current;
+    if (!element || nearView) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setNearView(true);
+      },
+      { rootMargin: "400px 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [nearView]);
+
   const custom = products.find((product) => product.id === "personalizada");
 
   const render = useCallback(() => {
@@ -97,8 +145,10 @@ export function LogoCustomizer() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(width / SCENE_W, 0, 0, height / SCENE_H, 0, 0);
-    drawScene(ctx, { logo, size, finish });
-  }, [logo, size, finish]);
+    // Con la vista 3D activa, este lienzo solo pinta el fondo del estudio.
+    if (threeReady) drawBackdrop(ctx);
+    else drawScene(ctx, { logo, size, finish });
+  }, [logo, size, finish, threeReady]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -155,21 +205,25 @@ export function LogoCustomizer() {
     setSize(Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(value * 100) / 100)));
   }
 
-  function download() {
-    if (!logo || downloading) return;
-    setDownloading(true);
+  /** Imagen de la vista 2D (cuando no hay vista 3D disponible). */
+  function export2D(currentLogo: LoadedLogo): Promise<Blob | null> {
     const canvas = document.createElement("canvas");
     canvas.width = SCENE_W * EXPORT_SCALE;
     canvas.height = SCENE_H * EXPORT_SCALE;
     const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      setDownloading(false);
-      return;
-    }
+    if (!ctx) return Promise.resolve(null);
     ctx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0);
-    drawScene(ctx, { logo, size, finish });
-    canvas.toBlob((blob) => {
-      setDownloading(false);
+    drawScene(ctx, { logo: currentLogo, size, finish });
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  }
+
+  async function download() {
+    if (!logo || downloading) return;
+    setDownloading(true);
+    try {
+      // Con la vista 3D se descarga exactamente lo que se ve (mismo ángulo).
+      const api = viewerApiRef.current;
+      const blob = threeReady && api ? await api.exportPNG() : await export2D(logo);
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -179,7 +233,9 @@ export function LogoCustomizer() {
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }, "image/png");
+    } finally {
+      setDownloading(false);
+    }
   }
 
   function handleDrop(event: React.DragEvent) {
@@ -197,7 +253,7 @@ export function LogoCustomizer() {
     onDrop: handleDrop,
   };
 
-  // Posición de la cara frontal en porcentaje, para la ayuda «Tu logotipo aquí».
+  // Posición de la cara frontal en la vista 2D, para la ayuda «Tu logotipo aquí».
   const panelStyle = {
     left: `${(PANEL_RECT.x / SCENE_W) * 100}%`,
     top: `${(PANEL_RECT.y / SCENE_H) * 100}%`,
@@ -216,18 +272,70 @@ export function LogoCustomizer() {
           dragging ? "border-accent shadow-[0_0_0_4px_var(--accent-soft)]" : "border-line",
         )}
       >
-        <div className="relative overflow-hidden rounded-[22px]">
+        <div ref={previewRef} className="relative overflow-hidden rounded-[22px]">
           <canvas
             ref={canvasRef}
-            role="img"
+            role={threeReady ? undefined : "img"}
+            aria-hidden={threeReady ? true : undefined}
             aria-label={
-              logo
-                ? "Vista previa de la tarjeta NFC de sobremesa con tu logotipo centrado"
-                : "Vista previa de la tarjeta NFC de sobremesa, todavía sin logotipo"
+              threeReady
+                ? undefined
+                : logo
+                  ? "Vista previa de la tarjeta NFC de sobremesa con tu logotipo centrado"
+                  : "Vista previa de la tarjeta NFC de sobremesa, todavía sin logotipo"
             }
             className="block aspect-[4/3] w-full bg-[#050a18]"
           />
-          {!logo ? (
+
+          {nearView && threeStatus !== "unsupported" ? (
+            <div
+              className={cn(
+                "absolute inset-0 transition-opacity duration-700",
+                threeReady ? "opacity-100" : "opacity-0",
+              )}
+            >
+              <StandViewer3D
+                logo={logo}
+                size={size}
+                finish={finish}
+                onReady={handleViewerReady}
+                onUnsupported={handleUnsupported}
+                onInteract={handleInteract}
+              />
+            </div>
+          ) : null}
+
+          {threeReady ? (
+            <>
+              <span
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/40 px-3 py-1.5 text-xs font-medium text-white/85 backdrop-blur-md transition-opacity duration-500",
+                  interacted ? "opacity-0" : "opacity-100",
+                )}
+              >
+                <Rotate3d className="size-3.5" /> Arrastra para girar
+              </span>
+              <button
+                type="button"
+                onClick={() => viewerApiRef.current?.resetView()}
+                className="absolute right-3 top-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 bg-black/40 px-3 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/60 active:scale-95"
+              >
+                <RotateCcw className="size-3.5" /> Restablecer vista
+              </button>
+              {!logo ? (
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-white/15 bg-black/45 px-4 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/65 sm:text-sm"
+                >
+                  <ImageUp className="size-4 text-[#7fb2ff]" /> Sube tu logotipo para verlo en la tarjeta
+                </button>
+              ) : null}
+            </>
+          ) : null}
+
+          {!logo && !threeReady ? (
             <button
               type="button"
               onClick={() => inputRef.current?.click()}

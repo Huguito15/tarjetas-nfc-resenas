@@ -246,14 +246,29 @@ function drawGloss(ctx: CanvasRenderingContext2D, finish: StandFinish) {
   ctx.stroke();
 }
 
-/** Calcula dónde se dibuja el logotipo: centrado y sin deformar. */
-export function logoRect(logo: LogoSource, size: number) {
-  const usableW = PANEL_W * (1 - SAFE_INSET * 2);
-  const usableH = PANEL_H * (1 - SAFE_INSET * 2);
+/**
+ * Encaja el logotipo dentro de una cara de tarjeta de `boxW`×`boxH`:
+ * centrado, sin deformar y respetando el margen interior.
+ */
+export function fitLogo(logo: LogoSource, size: number, boxW: number, boxH: number) {
+  const usableW = boxW * (1 - SAFE_INSET * 2);
+  const usableH = boxH * (1 - SAFE_INSET * 2);
   const scale = Math.min((usableW * size) / logo.sw, (usableH * size) / logo.sh);
   const w = logo.sw * scale;
   const h = logo.sh * scale;
-  return { x: PANEL_X + (PANEL_W - w) / 2, y: PANEL_Y + (PANEL_H - h) / 2, w, h };
+  return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h };
+}
+
+/** Calcula dónde se dibuja el logotipo en la escena 2D: centrado y sin deformar. */
+export function logoRect(logo: LogoSource, size: number) {
+  const r = fitLogo(logo, size, PANEL_W, PANEL_H);
+  return { x: PANEL_X + r.x, y: PANEL_Y + r.y, w: r.w, h: r.h };
+}
+
+/** Solo el fondo del estudio (pared, luces y mostrador), para la vista 3D. */
+export function drawBackdrop(ctx: CanvasRenderingContext2D) {
+  ctx.clearRect(0, 0, SCENE_W, SCENE_H);
+  drawBackground(ctx);
 }
 
 /** Rectángulo de la cara frontal en unidades de la escena (para superponer ayudas en pantalla). */
