@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { buildOrderSummary, validateOrder } from "@/lib/order";
+import { buildOrderSummary, getOrderPricing, validateOrder } from "@/lib/order";
+import { pendingCharges } from "@/lib/pricing";
+
+/** Identificador enviado por el formulario para detectar duplicados en el destino. */
+function readRequestId(body: unknown) {
+  const value = body && typeof body === "object" ? (body as { requestId?: unknown }).requestId : undefined;
+  return typeof value === "string" && /^[\w-]{6,64}$/.test(value) ? value : crypto.randomUUID();
+}
 
 /**
  * Recibe las solicitudes del formulario y las reenvía al webhook configurado
@@ -31,6 +38,8 @@ export async function POST(request: Request) {
   }
 
   const summary = buildOrderSummary(result.data);
+  // El precio se recalcula aquí: nunca se confía en importes enviados por el navegador.
+  const pricing = getOrderPricing(result.data.product, result.data.quantity);
 
   try {
     const response = await fetch(webhook, {
@@ -38,6 +47,11 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
         ...result.data,
+        requestId: readRequestId(body),
+        unitPrice: pricing?.unitPrice ?? null,
+        subtotal: pricing?.subtotal ?? null,
+        currency: "EUR",
+        pendingCharges,
         _subject: `Nueva solicitud de tarjetas NFC · ${result.data.business}`,
         _replyto: result.data.email,
         // "text" y "content" permiten usar directamente webhooks de Slack y Discord.

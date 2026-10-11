@@ -131,7 +131,7 @@ export function Contact({ endpointEnabled }: { endpointEnabled: boolean }) {
                 className="pointer-events-none absolute inset-x-10 -top-px h-px bg-gradient-to-r from-transparent via-accent to-transparent"
               />
               <h3 className="font-display text-xl font-semibold tracking-[-0.01em]">Formulario de pedido</h3>
-              <p className="mb-7 mt-1.5 text-sm text-muted">Todos los campos son obligatorios salvo el mensaje.</p>
+              <p className="mb-7 mt-1.5 text-sm text-muted">Todos los campos son obligatorios salvo el teléfono y el mensaje.</p>
               <OrderForm endpointEnabled={endpointEnabled} />
             </div>
           </Reveal>

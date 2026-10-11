@@ -7,6 +7,10 @@ Hecha con **Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 
 - Hero con tarjeta 3D que sigue al ratón, demostración animada del funcionamiento NFC y animaciones al hacer scroll.
 - Respeta la preferencia de **movimiento reducido** del dispositivo.
 - Productos (30 € y 40 €), packs bajo presupuesto, galería con visor ampliado, FAQ y formulario de pedido.
+- **Calculadora de precios** conectada al formulario y a WhatsApp, preparada para descuentos por volumen.
+- **Opiniones de clientes** (carrusel), que solo se muestran cuando se añaden opiniones reales.
+- **Gestión de cookies**: banner, panel de preferencias, retirada del consentimiento y política de cookies.
+- Páginas legales: aviso legal, política de privacidad y política de cookies.
 - SEO: metadatos, Open Graph (imagen generada), `sitemap.xml`, `robots.txt`, datos estructurados y manifiesto.
 
 ## Probar en local
@@ -27,10 +31,35 @@ Abre http://localhost:3000. Otros comandos: `npm run build` (compilación de pro
 | Nombre de la marca, WhatsApp, textos SEO, datos legales | `src/config/site.ts` |
 | Productos, precios, packs, FAQ, pasos, galería | `src/data/content.ts` |
 | Fotos de los modelos | `src/assets/modelos/` (y registrarlas en `src/data/content.ts`) |
+| Descuentos por volumen y conceptos pendientes (envío) | `src/lib/pricing.ts` |
+| Opiniones de clientes y fotos de instalaciones | `src/data/testimonials.ts` |
+| Inventario de cookies y herramientas opcionales | `src/config/cookies.ts` |
 | Colores y animaciones | `src/app/globals.css` (tokens `:root` y `.dark`) |
-| Política de privacidad (plantilla) | `src/app/privacidad/page.tsx` |
+| Textos legales (plantillas) | `src/app/aviso-legal`, `src/app/privacidad`, `src/app/cookies` |
 
 **Añadir una foto:** guárdala en `src/assets/modelos/`, impórtala en `src/data/content.ts` y añádela a `gallery`. Para usarla en un producto, asígnala a su campo `photo`. Si la tarjeta personalizada no tiene `photo`, se muestra una ilustración orientativa.
+
+### Calculadora y descuentos
+
+Los precios salen de `src/data/content.ts` y se calculan en `src/lib/pricing.ts`, el mismo código que usan la calculadora, el formulario, los mensajes de WhatsApp y la API (que recalcula siempre el precio en el servidor). Ahora mismo **no hay descuentos**: subtotal = precio × cantidad. Para añadirlos, rellena `volumeTiers` (por ejemplo, `{ minQuantity: 10, percentOff: 10 }`). Si quieres que a partir de cierta cantidad se pida presupuesto en vez de mostrar el total, cambia `QUOTE_FROM_QUANTITY`. Los gastos de envío aparecen como «pendiente de confirmar» y no se suman.
+
+### Opiniones de clientes
+
+Añade **solo opiniones reales y con permiso** en `src/data/testimonials.ts` (el archivo explica el formato). Mientras la lista esté vacía, la sección «La confianza de nuestros clientes» y su enlace del menú no se muestran. Las estrellas solo aparecen si indicas una valoración (`rating`).
+
+### Cookies
+
+Hoy la web no usa cookies de analítica ni de marketing; solo guarda en el navegador el tema elegido y la elección de cookies. Si algún día añades una herramienta (por ejemplo, Google Analytics):
+
+1. Regístrala en `optionalServices` de `src/config/cookies.ts` (aparecerá en el panel y en la política).
+2. Cárgala únicamente dentro de `<ConsentGate category="analytics">…</ConsentGate>` (`src/components/cookies/consent-gate.tsx`), así no se ejecuta sin consentimiento.
+3. Sube `CONSENT_VERSION` en `src/lib/consent.ts` para volver a pedir el consentimiento.
+
+La elección se guarda 12 meses; después se vuelve a preguntar. Si alguien retira un consentimiento con herramientas activas, la página se recarga para detenerlas.
+
+### Datos legales
+
+Rellena `siteConfig.legal` en `src/config/site.ts` (titular, NIF/CIF, domicilio y correo). Mientras falte alguno, el aviso legal y las políticas muestran «Documento pendiente de completar» y marcan cada dato que falta. Revisa los textos con un profesional antes de darlos por definitivos.
 
 ## Variables de entorno
 
@@ -83,6 +112,7 @@ Cada `git push` a `main` vuelve a publicar la web automáticamente. Para usar tu
 ## Antes de publicar de verdad
 
 - Cambia el nombre provisional **«NFC Reseñas»** en `src/config/site.ts`.
-- Completa los datos legales de `siteConfig.legal` y revisa la plantilla de `/privacidad`.
+- Completa los datos legales de `siteConfig.legal` y revisa las plantillas de `/aviso-legal`, `/privacidad` y `/cookies`.
+- Añade opiniones reales de clientes en `src/data/testimonials.ts` cuando las tengas.
 - WhatsApp ya está configurado. Si quieres recibir los pedidos también por correo o en un servicio externo, configura `NEXT_PUBLIC_CONTACT_EMAIL` u `ORDER_WEBHOOK_URL`.
 - Si añades fotos nuevas, usa una buena resolución (las actuales miden 1672 × 941 px). El marco de cada foto adopta su proporción real, así que no se recortan.

@@ -5,10 +5,14 @@ import * as m from "motion/react-m";
 import { AnimatePresence, useMotionValueEvent, useScroll, useSpring } from "motion/react";
 import { ArrowRight, Menu, X } from "lucide-react";
 import { navLinks } from "@/config/site";
+import { hasSocialProof } from "@/data/testimonials";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { ButtonLink } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+
+/** Enlaces visibles: «Opiniones» solo aparece cuando hay reseñas reales. */
+const links = navLinks.filter((link) => !link.needsSocialProof || hasSocialProof);
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -22,7 +26,7 @@ export function Navbar() {
   // Resalta el enlace de la sección visible.
   useEffect(() => {
     // Se observa también el hero para desmarcar el menú al volver arriba.
-    const sections = ["inicio", ...navLinks.map((link) => link.href.slice(1))]
+    const sections = ["inicio", ...links.map((link) => link.href.slice(1))]
       .map((id) => document.getElementById(id))
       .filter((el): el is HTMLElement => el !== null);
     const observer = new IntersectionObserver(
@@ -60,7 +64,7 @@ export function Navbar() {
           <Logo />
 
           <ul className="hidden items-center gap-1 rounded-full border border-line bg-surface/40 p-1 backdrop-blur-md xl:flex">
-            {navLinks.map((link) => {
+            {links.map((link) => {
               const isActive = active === link.href.slice(1);
               return (
                 <li key={link.href}>
@@ -129,7 +133,7 @@ export function Navbar() {
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             >
               <ul className="container-page flex flex-col py-4">
-                {navLinks.map((link, i) => (
+                {links.map((link, i) => (
                   <m.li
                     key={link.href}
                     initial={{ opacity: 0, x: -10 }}

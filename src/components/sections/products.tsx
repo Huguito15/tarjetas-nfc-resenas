@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Nfc, Palette, Sparkles } from "lucide-react";
+import { ArrowRight, Calculator as CalculatorIcon, Check, Nfc, Palette, Sparkles } from "lucide-react";
 import { gallery, products, type Product } from "@/data/content";
 import { cn, formatPrice } from "@/lib/utils";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -144,11 +144,22 @@ export function Products() {
           ))}
         </RevealGroup>
 
-        <Reveal className="mt-10 text-center text-sm text-muted">
-          ¿Necesitas varias unidades?{" "}
-          <a href="#packs" className="font-semibold text-accent underline-offset-4 hover:underline">
-            Consulta los packs para negocios
+        <Reveal className="mt-10 flex flex-col items-center gap-2 text-center text-sm text-muted sm:flex-row sm:justify-center sm:gap-5">
+          <a
+            href="#calculadora"
+            className="inline-flex items-center gap-1.5 font-semibold text-accent underline-offset-4 hover:underline"
+          >
+            <CalculatorIcon className="size-4" /> Calcula el precio de tu pedido
           </a>
+          <span aria-hidden className="hidden text-line-strong sm:inline">
+            ·
+          </span>
+          <span>
+            ¿Varias zonas o locales?{" "}
+            <a href="#packs" className="font-semibold text-accent underline-offset-4 hover:underline">
+              Consulta los packs
+            </a>
+          </span>
         </Reveal>
 
         {/* Galería de modelos reales */}

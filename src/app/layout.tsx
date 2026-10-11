@@ -3,6 +3,7 @@ import { Inter, Sora } from "next/font/google";
 import { siteConfig } from "@/config/site";
 import { getSiteUrl } from "@/lib/site-url";
 import { MotionProvider } from "@/components/providers/motion-provider";
+import { CookieConsent } from "@/components/cookies/cookie-consent";
 import "./globals.css";
 
 const inter = Inter({
@@ -79,7 +80,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         >
           Saltar al contenido
         </a>
-        <MotionProvider>{children}</MotionProvider>
+        <MotionProvider>
+          {children}
+          <CookieConsent />
+        </MotionProvider>
       </body>
     </html>
   );

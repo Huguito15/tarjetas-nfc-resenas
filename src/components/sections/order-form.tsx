@@ -1,10 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import * as m from "motion/react-m";
 import { AnimatePresence } from "motion/react";
-import { CircleAlert, CircleCheck, ChevronDown, Info, LoaderCircle, Mail, MessageCircle, Minus, Plus, Send } from "lucide-react";
+import {
+  Calculator as CalculatorIcon,
+  CircleAlert,
+  CircleCheck,
+  ChevronDown,
+  FileText,
+  Info,
+  LoaderCircle,
+  Mail,
+  MessageCircle,
+  Minus,
+  Plus,
+  Send,
+} from "lucide-react";
 import { mailtoHref, siteConfig, whatsappHref } from "@/config/site";
 import {
   MAX_MESSAGE,
@@ -12,14 +25,16 @@ import {
   buildOrderSummary,
   customizationOptions,
   getOrderOption,
+  getOrderPricing,
   orderOptions,
   validateOrder,
   type OrderErrors,
   type OrderRequest,
 } from "@/lib/order";
+import { pendingCharges } from "@/lib/pricing";
 import { useOrder } from "@/components/providers/order-provider";
 import { buttonStyles } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, formatPrice } from "@/lib/utils";
 
 type Mode = "endpoint" | "whatsapp" | "email" | "none";
 
@@ -31,10 +46,22 @@ type Status =
   | { type: "error" }
   | { type: "unavailable" };
 
+/** Tiempo durante el que el botón queda bloqueado tras abrir WhatsApp o el correo. */
+const HANDOFF_LOCK_MS = 4000;
+
+const emptyFields = { name: "", business: "", email: "", phone: "", message: "", consent: false, website: "" };
+
+/** Identificador de solicitud: permite detectar envíos duplicados en el destino. */
+function newRequestId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 const fieldIds: Record<keyof OrderRequest, string> = {
   name: "pedido-nombre",
   business: "pedido-negocio",
   email: "pedido-email",
+  phone: "pedido-telefono",
   product: "pedido-producto",
   quantity: "pedido-cantidad",
   customization: "pedido-personalizacion-si",
@@ -66,13 +93,19 @@ function Label({ htmlFor, children, optional }: { htmlFor: string; children: Rea
 
 export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
   const order = useOrder();
-  const [fields, setFields] = useState({ name: "", business: "", email: "", message: "", consent: false, website: "" });
+  const [fields, setFields] = useState(emptyFields);
   const [errors, setErrors] = useState<OrderErrors>({});
   const [status, setStatus] = useState<Status>({ type: "idle" });
+  const [locked, setLocked] = useState(false);
+  // Bloqueo síncrono: evita dobles envíos aunque se pulse muy rápido.
+  const submittingRef = useRef(false);
+  // Se conserva mientras no cambien los datos, así un reintento lleva el mismo identificador.
+  const requestIdRef = useRef<string | null>(null);
 
   const wa = whatsappHref();
   const mode: Mode = endpointEnabled ? "endpoint" : wa ? "whatsapp" : siteConfig.email ? "email" : "none";
   const minQuantity = getOrderOption(order.product)?.minQuantity ?? 1;
+  const pricing = order.product ? getOrderPricing(order.product, order.quantity) : null;
 
   function clearError(key: keyof OrderRequest) {
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
@@ -80,26 +113,37 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
 
   function update<K extends keyof typeof fields>(key: K, value: (typeof fields)[K]) {
     setFields((prev) => ({ ...prev, [key]: value }));
+    requestIdRef.current = null;
     if (key in fieldIds) clearError(key as keyof OrderRequest);
   }
 
   function changeQuantity(value: number) {
     const next = Math.min(MAX_QUANTITY, Math.max(1, Number.isFinite(value) ? Math.round(value) : 1));
     order.setQuantity(next);
+    requestIdRef.current = null;
     clearError("quantity");
   }
 
-  async function sendToEndpoint(data: OrderRequest) {
+  function lockFor(ms: number) {
+    setLocked(true);
+    window.setTimeout(() => {
+      submittingRef.current = false;
+      setLocked(false);
+    }, ms);
+  }
+
+  async function sendToEndpoint(data: OrderRequest, requestId: string) {
     setStatus({ type: "sending" });
     try {
       const response = await fetch("/api/pedido", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, website: fields.website }),
+        body: JSON.stringify({ ...data, requestId, website: fields.website }),
       });
       if (response.ok) {
         setStatus({ type: "success", email: data.email });
-        setFields({ name: "", business: "", email: "", message: "", consent: false, website: "" });
+        setFields(emptyFields);
+        requestIdRef.current = null;
         return;
       }
       if (response.status === 422) {
@@ -111,12 +155,14 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
       setStatus({ type: response.status === 503 ? "unavailable" : "error" });
     } catch {
       setStatus({ type: "error" });
+    } finally {
+      submittingRef.current = false;
     }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (status.type === "sending") return;
+    if (submittingRef.current || status.type === "sending" || locked) return;
 
     const result = validateOrder({
       ...fields,
@@ -134,20 +180,25 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
     }
 
     setErrors({});
+    submittingRef.current = true;
+    requestIdRef.current ??= newRequestId();
     const summary = buildOrderSummary(result.data);
 
     if (mode === "endpoint") {
-      void sendToEndpoint(result.data);
+      void sendToEndpoint(result.data, requestIdRef.current);
     } else if (mode === "whatsapp") {
       const href = whatsappHref(summary)!;
       window.open(href, "_blank", "noopener,noreferrer");
       setStatus({ type: "handoff", channel: "whatsapp", href });
+      lockFor(HANDOFF_LOCK_MS);
     } else if (mode === "email") {
       const href = mailtoHref(`Solicitud de tarjetas NFC · ${result.data.business}`, summary)!;
       window.location.href = href;
       setStatus({ type: "handoff", channel: "email", href });
+      lockFor(HANDOFF_LOCK_MS);
     } else {
       setStatus({ type: "unavailable" });
+      submittingRef.current = false;
     }
   }
 
@@ -199,7 +250,7 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
           <FieldError id={`${fieldIds.business}-error`} message={errors.business} />
         </div>
 
-        <div className="sm:col-span-2">
+        <div>
           <Label htmlFor={fieldIds.email}>Correo electrónico</Label>
           <input
             id={fieldIds.email}
@@ -217,6 +268,27 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
           <FieldError id={`${fieldIds.email}-error`} message={errors.email} />
         </div>
 
+        <div>
+          <Label htmlFor={fieldIds.phone} optional>
+            Teléfono
+          </Label>
+          <input
+            id={fieldIds.phone}
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            maxLength={30}
+            value={fields.phone}
+            onChange={(e) => update("phone", e.target.value)}
+            aria-invalid={errors.phone ? true : undefined}
+            aria-describedby={describedBy("phone")}
+            placeholder="600 123 456"
+            className={cn(inputClass, "h-12")}
+          />
+          <FieldError id={`${fieldIds.phone}-error`} message={errors.phone} />
+        </div>
+
         <div className="grid gap-5 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
           <div>
             <Label htmlFor={fieldIds.product}>Producto</Label>
@@ -227,6 +299,7 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
                 value={order.product}
                 onChange={(e) => {
                   order.setProduct(e.target.value);
+                  requestIdRef.current = null;
                   clearError("product");
                   clearError("quantity");
                 }}
@@ -287,7 +360,45 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
           </div>
         </div>
 
-        <fieldset className="sm:col-span-2" aria-describedby={describedBy("customization")}>
+        {order.product ? (
+          <div className="rounded-2xl border border-accent/25 bg-accent-soft/60 p-4 sm:col-span-2" aria-live="polite">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-fg">Resumen del pedido</p>
+              {order.source === "calculadora" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent">
+                  <CalculatorIcon className="size-3.5" /> Datos de la calculadora
+                </span>
+              ) : null}
+            </div>
+            {pricing && pricing.subtotal !== null ? (
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
+                <div>
+                  <dt className="text-xs text-muted">Precio por unidad</dt>
+                  <dd className="font-medium tabular-nums text-fg">{formatPrice(pricing.unitPrice)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">Cantidad</dt>
+                  <dd className="font-medium tabular-nums text-fg">× {pricing.quantity}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">Subtotal</dt>
+                  <dd className="font-display text-lg font-semibold tabular-nums text-fg">{formatPrice(pricing.subtotal)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">{pendingCharges.join(", ")}</dt>
+                  <dd className="text-subtle">Pendiente de confirmar</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-muted">
+                <FileText className="mt-0.5 size-4 shrink-0 text-accent" />
+                Precio bajo presupuesto: te enviaremos una propuesta según la cantidad y la personalización.
+              </p>
+            )}
+          </div>
+        ) : null}
+
+        <fieldset className="min-w-0 sm:col-span-2" aria-describedby={describedBy("customization")}>
           <legend className="mb-2 text-sm font-medium text-fg">¿Necesitas personalización?</legend>
           <div className="grid grid-cols-3 gap-2.5">
             {customizationOptions.map((option) => (
@@ -300,6 +411,7 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
                   checked={order.customization === option.value}
                   onChange={() => {
                     order.setCustomization(option.value);
+                    requestIdRef.current = null;
                     clearError("customization");
                   }}
                   className="peer sr-only"
@@ -367,18 +479,77 @@ export function OrderForm({ endpointEnabled }: { endpointEnabled: boolean }) {
             </span>
           </label>
           <FieldError id={`${fieldIds.consent}-error`} message={errors.consent} />
+
+          {/* Primera capa de información (art. 13 RGPD). */}
+          <details className="group mt-3 rounded-xl border border-line bg-bg/40 text-xs leading-relaxed text-muted">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-2.5 font-medium text-fg/80 [&::-webkit-details-marker]:hidden">
+              Información básica sobre protección de datos
+              <ChevronDown className="size-4 shrink-0 transition-transform duration-300 group-open:rotate-180" />
+            </summary>
+            <dl className="grid gap-1.5 px-3.5 pb-3.5">
+              <div>
+                <dt className="inline font-semibold text-fg/80">Responsable: </dt>
+                <dd className="inline">
+                  {siteConfig.legal.owner || (
+                    <>
+                      el titular de esta web (ver{" "}
+                      <Link href="/aviso-legal" className="text-accent underline-offset-4 hover:underline">
+                        Aviso legal
+                      </Link>
+                      )
+                    </>
+                  )}
+                  .
+                </dd>
+              </div>
+              <div>
+                <dt className="inline font-semibold text-fg/80">Finalidad: </dt>
+                <dd className="inline">atender tu solicitud de información o de pedido y comunicarnos contigo sobre ella.</dd>
+              </div>
+              <div>
+                <dt className="inline font-semibold text-fg/80">Legitimación: </dt>
+                <dd className="inline">
+                  tu consentimiento y, si haces un pedido, la aplicación de medidas precontractuales a petición tuya.
+                </dd>
+              </div>
+              <div>
+                <dt className="inline font-semibold text-fg/80">Destinatarios: </dt>
+                <dd className="inline">
+                  no se ceden datos a terceros salvo obligación legal.
+                  {mode === "whatsapp"
+                    ? " Si envías la solicitud por WhatsApp, el mensaje se transmite a través de ese servicio (WhatsApp, del grupo Meta)."
+                    : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline font-semibold text-fg/80">Derechos: </dt>
+                <dd className="inline">
+                  acceso, rectificación, supresión, oposición, limitación y portabilidad, como se explica en la{" "}
+                  <Link href="/privacidad" className="text-accent underline-offset-4 hover:underline">
+                    política de privacidad
+                  </Link>
+                  .
+                </dd>
+              </div>
+            </dl>
+          </details>
         </div>
       </div>
 
       <div className="mt-7">
         <button
           type="submit"
-          disabled={status.type === "sending"}
+          disabled={status.type === "sending" || locked}
+          aria-disabled={status.type === "sending" || locked}
           className={buttonStyles({ size: "lg", className: "w-full" })}
         >
           {status.type === "sending" ? (
             <>
               <LoaderCircle className="animate-spin" /> Enviando…
+            </>
+          ) : locked ? (
+            <>
+              <CircleCheck /> {mode === "whatsapp" ? "WhatsApp abierto" : "Correo abierto"}
             </>
           ) : (
             <>

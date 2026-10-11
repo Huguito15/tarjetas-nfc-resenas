@@ -1,5 +1,6 @@
 import { packs, products } from "@/data/content";
 import { formatPrice } from "@/lib/utils";
+import { MAX_UNITS, calculatePrice, isProductId, pendingCharges, type PriceQuote } from "@/lib/pricing";
 
 /* Lógica compartida entre el formulario (cliente) y la API (servidor). */
 
@@ -35,13 +36,15 @@ export const customizationOptions: { value: Customization; label: string; hint: 
   { value: "no-se", label: "No lo sé", hint: "Quiero consejo" },
 ];
 
-export const MAX_QUANTITY = 999;
+export const MAX_QUANTITY = MAX_UNITS;
 export const MAX_MESSAGE = 1000;
 
 export type OrderRequest = {
   name: string;
   business: string;
   email: string;
+  /** Opcional. */
+  phone: string;
   product: string;
   quantity: number;
   customization: Customization;
@@ -52,9 +55,20 @@ export type OrderRequest = {
 export type OrderErrors = Partial<Record<keyof OrderRequest, string>>;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+/** Admite +34 600 123 456, 600-123-456, (+34) 600123456… (9 a 15 dígitos). */
+const PHONE_RE = /^\+?\d{9,15}$/;
+
+export function normalizePhone(value: string) {
+  return value.replace(/[\s().-]/g, "");
+}
 
 export function getOrderOption(value: string) {
   return orderOptions.find((o) => o.value === value);
+}
+
+/** Precio calculado del pedido, o null si es un pack o asesoramiento (bajo presupuesto). */
+export function getOrderPricing(product: string, quantity: number): PriceQuote | null {
+  return isProductId(product) ? calculatePrice(product, quantity) : null;
 }
 
 function str(value: unknown, max: number) {
@@ -67,6 +81,7 @@ export function validateOrder(input: unknown): { ok: true; data: OrderRequest } 
     name: str(raw.name, 80),
     business: str(raw.business, 120),
     email: str(raw.email, 160),
+    phone: str(raw.phone, 30),
     product: str(raw.product, 40),
     quantity: Number(raw.quantity),
     customization: (["si", "no", "no-se"].includes(String(raw.customization))
@@ -80,6 +95,9 @@ export function validateOrder(input: unknown): { ok: true; data: OrderRequest } 
   if (data.name.length < 2) errors.name = "Indica tu nombre.";
   if (data.business.length < 2) errors.business = "Indica el nombre de tu negocio.";
   if (!EMAIL_RE.test(data.email)) errors.email = "Introduce un correo electrónico válido.";
+  if (data.phone && !PHONE_RE.test(normalizePhone(data.phone))) {
+    errors.phone = "Introduce un teléfono válido (por ejemplo, 600 123 456) o deja el campo vacío.";
+  }
 
   const option = getOrderOption(data.product);
   if (!option) {
@@ -96,6 +114,20 @@ export function validateOrder(input: unknown): { ok: true; data: OrderRequest } 
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true, data };
 }
 
+const pendingNote = `${pendingCharges.join(", ")}: pendientes de confirmar`;
+
+/** Líneas de precio de un pedido (para resúmenes en texto). */
+function priceLines(pricing: PriceQuote | null) {
+  if (!pricing) return ["• Precio: bajo presupuesto"];
+  if (pricing.subtotal === null) {
+    return [`• Precio por unidad: ${formatPrice(pricing.unitPrice)}`, "• Total: bajo presupuesto"];
+  }
+  const lines = [`• Precio por unidad: ${formatPrice(pricing.unitPrice)}`];
+  if (pricing.savings > 0) lines.push(`• Descuento por volumen: -${formatPrice(pricing.savings)}`);
+  lines.push(`• Subtotal: ${formatPrice(pricing.subtotal)}`);
+  return lines;
+}
+
 /** Resumen legible del pedido para WhatsApp, correo o webhook. */
 export function buildOrderSummary(data: OrderRequest) {
   const product = getOrderOption(data.product)?.label ?? data.product;
@@ -106,10 +138,29 @@ export function buildOrderSummary(data: OrderRequest) {
     `• Nombre: ${data.name}`,
     `• Negocio: ${data.business}`,
     `• Correo: ${data.email}`,
+  ];
+  if (data.phone) lines.push(`• Teléfono: ${data.phone}`);
+  lines.push(
     `• Producto: ${product}`,
     `• Cantidad: ${data.quantity}`,
     `• Personalización: ${customization ? `${customization.label} (${customization.hint.toLowerCase()})` : "-"}`,
-  ];
+    ...priceLines(getOrderPricing(data.product, data.quantity)),
+    `• ${pendingNote}`,
+  );
   if (data.message) lines.push("", `Mensaje: ${data.message}`);
   return lines.join("\n");
+}
+
+/** Mensaje de WhatsApp con la selección hecha en la calculadora. */
+export function buildQuoteWhatsappMessage(quote: PriceQuote) {
+  return [
+    "Hola, estoy interesado en comprar tarjetas NFC para mi negocio. He usado la calculadora de la web:",
+    "",
+    `• Producto: ${quote.product.name}`,
+    `• Cantidad: ${quote.quantity}`,
+    ...priceLines(quote),
+    `• ${pendingNote}`,
+    "",
+    "Me gustaría recibir información.",
+  ].join("\n");
 }

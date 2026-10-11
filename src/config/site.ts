@@ -34,17 +34,42 @@ export const siteConfig = {
   whatsapp: {
     number: whatsappNumber,
     display: formatPhone(whatsappNumber),
-    defaultMessage: "Hola, me interesan vuestras tarjetas NFC para reseñas de Google.",
+    defaultMessage:
+      "Hola, estoy interesado en comprar una tarjeta NFC para mi negocio. Me gustaría recibir información.",
   },
   email: contactEmail,
-  /** Datos del titular para la política de privacidad. Complétalos antes de publicar. */
+  /**
+   * Datos del titular para el aviso legal y las políticas de privacidad y cookies.
+   * Mientras alguno obligatorio esté vacío, esas páginas muestran un aviso de
+   * "documento pendiente de completar" y los huecos aparecen marcados.
+   */
   legal: {
-    owner: "[Nombre o razón social]",
-    taxId: "[NIF/CIF]",
-    address: "[Dirección postal]",
-    email: contactEmail || "[Correo de contacto]",
+    /** Nombre y apellidos (autónomo) o razón social (empresa). */
+    owner: "",
+    /** NIF o CIF. */
+    taxId: "",
+    /** Domicilio postal completo. */
+    address: "",
+    /** Correo para consultas y para ejercer los derechos de protección de datos. */
+    email: contactEmail,
+    /** Solo sociedades: datos de inscripción en el Registro Mercantil. Déjalo vacío si no aplica. */
+    registry: "",
   },
+  /** Fecha de la última revisión de los textos legales. */
+  legalUpdatedAt: "11 de octubre de 2026",
 } as const;
+
+const requiredLegalFields = [
+  ["owner", "Nombre o razón social del titular"],
+  ["taxId", "NIF o CIF"],
+  ["address", "Domicilio"],
+  ["email", "Correo electrónico de contacto"],
+] as const;
+
+/** Datos legales obligatorios que aún faltan por completar. */
+export function missingLegalFields(): string[] {
+  return requiredLegalFields.filter(([key]) => !siteConfig.legal[key].trim()).map(([, label]) => label);
+}
 
 export function whatsappHref(message: string = siteConfig.whatsapp.defaultMessage) {
   if (!siteConfig.whatsapp.number) return null;
@@ -59,11 +84,23 @@ export function mailtoHref(subject: string, body?: string) {
   return `mailto:${siteConfig.email}?${params.toString().replace(/\+/g, "%20")}`;
 }
 
-export const navLinks = [
+/**
+ * Enlaces del menú. Los marcados con `needsSocialProof` solo se muestran
+ * cuando la sección de opiniones tiene contenido (ver src/data/testimonials.ts).
+ */
+export const navLinks: { href: string; label: string; needsSocialProof?: boolean }[] = [
   { href: "#como-funciona", label: "Cómo funciona" },
   { href: "#ventajas", label: "Ventajas" },
+  { href: "#opiniones", label: "Opiniones", needsSocialProof: true },
   { href: "#productos", label: "Productos" },
+  { href: "#calculadora", label: "Calculadora" },
   { href: "#packs", label: "Packs" },
   { href: "#faq", label: "Preguntas" },
   { href: "#contacto", label: "Contacto" },
+];
+
+export const legalLinks = [
+  { href: "/aviso-legal", label: "Aviso legal" },
+  { href: "/privacidad", label: "Política de privacidad" },
+  { href: "/cookies", label: "Política de cookies" },
 ] as const;

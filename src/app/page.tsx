@@ -10,6 +10,8 @@ import { Hero } from "@/components/sections/hero";
 import { UseCases } from "@/components/sections/use-cases";
 import { HowItWorks } from "@/components/sections/how-it-works";
 import { Benefits } from "@/components/sections/benefits";
+import { Testimonials } from "@/components/sections/testimonials";
+import { Calculator } from "@/components/sections/calculator";
 import { Products } from "@/components/sections/products";
 import { Packs } from "@/components/sections/packs";
 import { Faq } from "@/components/sections/faq";
@@ -60,7 +62,9 @@ export default function HomePage() {
           <UseCases />
           <HowItWorks />
           <Benefits />
+          <Testimonials />
           <Products />
+          <Calculator />
           <Packs />
           <Faq />
           <CtaBand />
