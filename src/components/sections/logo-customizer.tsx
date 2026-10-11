@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
+  ArrowDown,
+  ArrowLeft,
   ArrowRight,
+  ArrowUp,
   CircleAlert,
   Download,
   ImageUp,
+  LocateFixed,
   Minus,
   Plus,
   Rotate3d,
@@ -17,12 +21,16 @@ import {
 import { products } from "@/data/content";
 import { cn, formatPrice } from "@/lib/utils";
 import {
-  PANEL_RECT,
+  CENTERED,
   SCENE_H,
   SCENE_W,
   drawBackdrop,
   drawScene,
+  loadVinyl,
+  logoCanMove,
+  type LogoPosition,
   type LogoSource,
+  type SceneOptions,
   type StandFinish,
 } from "@/lib/stand-scene";
 import type { StandViewerApi } from "@/components/sections/stand-viewer-3d";
@@ -39,7 +47,11 @@ const ACCEPTED = ["image/png", "image/jpeg", "image/webp"];
 const MAX_BYTES = 10 * 1024 * 1024;
 const MIN_SIZE = 0.2;
 const MAX_SIZE = 1;
-const DEFAULT_SIZE = 0.7;
+/** Por defecto el logotipo ocupa más o menos lo mismo que el texto «TU LOGO». */
+const DEFAULT_SIZE = 0.85;
+/** Cada pulsación de las flechas mueve el logotipo un octavo del recorrido. */
+const POSITION_STEP = 0.125;
+const DEFAULT_FINISH: StandFinish = "blanco";
 /** Resolución de la imagen descargable (misma escena que la vista previa). */
 const EXPORT_SCALE = 1;
 
@@ -83,17 +95,19 @@ function visibleBounds(image: HTMLImageElement) {
 }
 
 /**
- * Personalizador de la tarjeta NFC de sobremesa: el cliente sube su logotipo
- * y ve al instante la tarjeta con SOLO su logotipo, centrado.
+ * Personalizador de la tarjeta NFC de sobremesa: la cara lleva el vinilo
+ * oficial (fijo) y el cliente solo cambia la zona «TU LOGO» por su logotipo.
  * Todo ocurre en el navegador: el archivo no se envía a ningún servidor.
  */
 export function LogoCustomizer() {
   const order = useOrder();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [vinyl, setVinyl] = useState<HTMLImageElement | null>(null);
   const [logo, setLogo] = useState<LoadedLogo | null>(null);
   const [size, setSize] = useState(DEFAULT_SIZE);
-  const [finish, setFinish] = useState<StandFinish>("blanco");
+  const [position, setPosition] = useState<LogoPosition>(CENTERED);
+  const [finish, setFinish] = useState<StandFinish>(DEFAULT_FINISH);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -128,6 +142,27 @@ export function LogoCustomizer() {
     return () => observer.disconnect();
   }, [nearView]);
 
+  // El vinilo se descarga junto con la vista 3D, al acercarse a la sección.
+  useEffect(() => {
+    if (!nearView) return;
+    let active = true;
+    loadVinyl()
+      .then((image) => {
+        if (active) setVinyl(image);
+      })
+      .catch(() => {
+        /* sin vinilo la cara queda en blanco; el resto sigue funcionando */
+      });
+    return () => {
+      active = false;
+    };
+  }, [nearView]);
+
+  const design = useMemo<SceneOptions>(
+    () => ({ vinyl, logo, size, position, finish }),
+    [vinyl, logo, size, position, finish],
+  );
+
   const custom = products.find((product) => product.id === "personalizada");
 
   const render = useCallback(() => {
@@ -147,8 +182,8 @@ export function LogoCustomizer() {
     ctx.setTransform(width / SCENE_W, 0, 0, height / SCENE_H, 0, 0);
     // Con la vista 3D activa, este lienzo solo pinta el fondo del estudio.
     if (threeReady) drawBackdrop(ctx);
-    else drawScene(ctx, { logo, size, finish });
-  }, [logo, size, finish, threeReady]);
+    else drawScene(ctx, design);
+  }, [design, threeReady]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -186,6 +221,7 @@ export function LogoCustomizer() {
     image.onload = () => {
       setLogo({ image, url, name: file.name, ...visibleBounds(image) });
       setSize(DEFAULT_SIZE);
+      setPosition(CENTERED);
       setError(null);
     };
     image.onerror = () => {
@@ -205,15 +241,69 @@ export function LogoCustomizer() {
     setSize(Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(value * 100) / 100)));
   }
 
+  /** Mueve el logotipo dentro de la zona «TU LOGO» (nunca sale de ella). */
+  function moveLogo(dx: number, dy: number) {
+    setPosition((current) => ({
+      x: Math.min(1, Math.max(-1, current.x + dx * POSITION_STEP)),
+      y: Math.min(1, Math.max(-1, current.y + dy * POSITION_STEP)),
+    }));
+  }
+
+  function resetCustomization() {
+    setSize(DEFAULT_SIZE);
+    setPosition(CENTERED);
+    setFinish(DEFAULT_FINISH);
+  }
+
+  const canMove = logo ? logoCanMove(logo, size) : { x: false, y: false };
+  const centered = position.x === 0 && position.y === 0;
+  // Sin logotipo, el tamaño y la posición no se ven (y se reinician al subir otro).
+  const isDefault = finish === DEFAULT_FINISH && (!logo || (size === DEFAULT_SIZE && centered));
+  // Cruceta de flechas: cada botón se desactiva al llegar al borde de la zona.
+  const moveButtons = [
+    {
+      label: "Mover el logotipo hacia arriba",
+      icon: ArrowUp,
+      dx: 0,
+      dy: -1,
+      cell: "col-start-2 row-start-1",
+      disabled: !canMove.y || position.y <= -1,
+    },
+    {
+      label: "Mover el logotipo a la izquierda",
+      icon: ArrowLeft,
+      dx: -1,
+      dy: 0,
+      cell: "col-start-1 row-start-2",
+      disabled: !canMove.x || position.x <= -1,
+    },
+    {
+      label: "Mover el logotipo a la derecha",
+      icon: ArrowRight,
+      dx: 1,
+      dy: 0,
+      cell: "col-start-3 row-start-2",
+      disabled: !canMove.x || position.x >= 1,
+    },
+    {
+      label: "Mover el logotipo hacia abajo",
+      icon: ArrowDown,
+      dx: 0,
+      dy: 1,
+      cell: "col-start-2 row-start-3",
+      disabled: !canMove.y || position.y >= 1,
+    },
+  ];
+
   /** Imagen de la vista 2D (cuando no hay vista 3D disponible). */
-  function export2D(currentLogo: LoadedLogo): Promise<Blob | null> {
+  function export2D(): Promise<Blob | null> {
     const canvas = document.createElement("canvas");
     canvas.width = SCENE_W * EXPORT_SCALE;
     canvas.height = SCENE_H * EXPORT_SCALE;
     const ctx = canvas.getContext("2d");
     if (!ctx) return Promise.resolve(null);
     ctx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0);
-    drawScene(ctx, { logo: currentLogo, size, finish });
+    drawScene(ctx, design);
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   }
 
@@ -223,7 +313,7 @@ export function LogoCustomizer() {
     try {
       // Con la vista 3D se descarga exactamente lo que se ve (mismo ángulo).
       const api = viewerApiRef.current;
-      const blob = threeReady && api ? await api.exportPNG() : await export2D(logo);
+      const blob = threeReady && api ? await api.exportPNG() : await export2D();
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -253,15 +343,6 @@ export function LogoCustomizer() {
     onDrop: handleDrop,
   };
 
-  // Posición de la cara frontal en la vista 2D, para la ayuda «Tu logotipo aquí».
-  const panelStyle = {
-    left: `${(PANEL_RECT.x / SCENE_W) * 100}%`,
-    top: `${(PANEL_RECT.y / SCENE_H) * 100}%`,
-    width: `${(PANEL_RECT.w / SCENE_W) * 100}%`,
-    height: `${(PANEL_RECT.h / SCENE_H) * 100}%`,
-    borderRadius: `${(PANEL_RECT.r / PANEL_RECT.w) * 100}% / ${(PANEL_RECT.r / PANEL_RECT.h) * 100}%`,
-  };
-
   return (
     <div className="mt-16 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] lg:gap-8">
       {/* Vista previa */}
@@ -281,7 +362,7 @@ export function LogoCustomizer() {
               threeReady
                 ? undefined
                 : logo
-                  ? "Vista previa de la tarjeta NFC de sobremesa con tu logotipo centrado"
+                  ? "Vista previa de la tarjeta NFC de sobremesa con tu logotipo"
                   : "Vista previa de la tarjeta NFC de sobremesa, todavía sin logotipo"
             }
             className="block aspect-[4/3] w-full bg-[#050a18]"
@@ -295,9 +376,7 @@ export function LogoCustomizer() {
               )}
             >
               <StandViewer3D
-                logo={logo}
-                size={size}
-                finish={finish}
+                design={design}
                 onReady={handleViewerReady}
                 onUnsupported={handleUnsupported}
                 onInteract={handleInteract}
@@ -323,31 +402,17 @@ export function LogoCustomizer() {
               >
                 <RotateCcw className="size-3.5" /> Restablecer vista
               </button>
-              {!logo ? (
-                <button
-                  type="button"
-                  onClick={() => inputRef.current?.click()}
-                  className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-white/15 bg-black/45 px-4 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/65 sm:text-sm"
-                >
-                  <ImageUp className="size-4 text-[#7fb2ff]" /> Sube tu logotipo para verlo en la tarjeta
-                </button>
-              ) : null}
             </>
           ) : null}
 
-          {!logo && !threeReady ? (
+          {/* Sin logotipo, el vinilo muestra «TU LOGO»: la ayuda va abajo para no taparlo */}
+          {!logo ? (
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              style={panelStyle}
-              className={cn(
-                "absolute flex flex-col items-center justify-center gap-2 border-2 border-dashed p-3 text-center text-[#4b5670] transition-colors",
-                finish === "negro" ? "border-white/25 text-white/70" : "border-[#1f5eff]/35",
-                "hover:border-[#1f5eff]/70",
-              )}
+              className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-white/15 bg-black/45 px-4 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/65 sm:text-sm"
             >
-              <ImageUp className="size-7 text-[#1f5eff] sm:size-9" />
-              <span className="text-xs font-semibold sm:text-sm">Tu logotipo aquí</span>
+              <ImageUp className="size-4 text-[#7fb2ff]" /> Sube tu logotipo para verlo en la tarjeta
             </button>
           ) : null}
         </div>
@@ -455,9 +520,61 @@ export function LogoCustomizer() {
           <p className="mt-2 text-xs text-subtle">El logotipo se centra automáticamente y nunca se deforma.</p>
         </div>
 
+        <div className="mt-7">
+          <p className="flex items-center gap-2.5 font-display text-lg font-semibold">
+            <span className="grid size-7 place-items-center rounded-lg bg-accent text-sm text-white">3</span>
+            Coloca tu logotipo
+          </p>
+          <div className="mt-4 flex items-center gap-4">
+            <div role="group" aria-label="Mover el logotipo" className="grid shrink-0 grid-cols-3 grid-rows-3 gap-1.5">
+              {moveButtons.map(({ label, icon: Icon, dx, dy, cell, disabled }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => moveLogo(dx, dy)}
+                  disabled={!logo || disabled}
+                  aria-label={label}
+                  className={cn(
+                    "grid size-11 place-items-center rounded-xl border border-line-strong text-muted transition hover:bg-accent-soft hover:text-fg active:scale-90 disabled:opacity-35",
+                    cell,
+                  )}
+                >
+                  <Icon className="size-4" />
+                </button>
+              ))}
+              <span aria-hidden className="col-start-2 row-start-2 grid size-11 place-items-center">
+                <span className={cn("size-2 rounded-full", logo && centered ? "bg-accent" : "bg-line-strong")} />
+              </span>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <button
+                type="button"
+                onClick={() => setPosition(CENTERED)}
+                disabled={!logo || centered}
+                title="Centrar el logotipo en la zona «TU LOGO»"
+                className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-line-strong px-3 text-sm font-semibold text-fg transition hover:bg-accent-soft active:scale-95 disabled:opacity-35"
+              >
+                <LocateFixed className="size-4 shrink-0 text-accent" /> Centrar
+              </button>
+              <button
+                type="button"
+                onClick={resetCustomization}
+                disabled={isDefault}
+                title="Volver al tamaño, la posición y el color iniciales"
+                className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-line-strong px-3 text-sm font-semibold text-fg transition hover:bg-accent-soft active:scale-95 disabled:opacity-35"
+              >
+                <RotateCcw className="size-4 shrink-0 text-accent" /> Restablecer
+              </button>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-subtle">
+            Solo se mueve dentro de la zona «TU LOGO»: el resto del vinilo no cambia.
+          </p>
+        </div>
+
         <fieldset className="mt-7 min-w-0">
           <legend className="flex items-center gap-2.5 font-display text-lg font-semibold">
-            <span className="grid size-7 place-items-center rounded-lg bg-accent text-sm text-white">3</span>
+            <span className="grid size-7 place-items-center rounded-lg bg-accent text-sm text-white">4</span>
             Color de la tarjeta
           </legend>
           <div className="mt-4 grid grid-cols-2 gap-2.5">
@@ -484,7 +601,9 @@ export function LogoCustomizer() {
               </label>
             ))}
           </div>
-          <p className="mt-2 text-xs text-subtle">Si tu logotipo es oscuro, elige la tarjeta blanca (y al revés).</p>
+          <p className="mt-2 text-xs text-subtle">
+            El vinilo es siempre blanco: el color se aplica al canto y a la parte trasera de la tarjeta.
+          </p>
         </fieldset>
 
         <div className="mt-8 grid gap-3">

@@ -3,9 +3,12 @@
  * La misma función pinta la vista previa y la imagen descargable, así que ambas
  * son idénticas (solo cambia la resolución).
  *
- * La cara frontal de la tarjeta queda completamente limpia: el único elemento
- * que se dibuja sobre ella es el logotipo del cliente, centrado.
+ * La cara frontal lleva el vinilo oficial, que es fijo. Lo único que cambia es
+ * la zona «TU LOGO»: cuando el cliente sube su logotipo, el texto de ejemplo
+ * desaparece y su logotipo ocupa ese espacio.
  */
+
+import vinylAsset from "@/assets/personalizador/vinilo-resenas.webp";
 
 export const SCENE_W = 1600;
 export const SCENE_H = 1200;
@@ -21,12 +24,47 @@ export type LogoSource = {
   sh: number;
 };
 
+/** Posición del logotipo dentro de la zona «TU LOGO»: de -1 a 1 en cada eje (0 = centrado). */
+export type LogoPosition = { x: number; y: number };
+
+export const CENTERED: LogoPosition = { x: 0, y: 0 };
+
 export type SceneOptions = {
+  /** Vinilo fijo de la cara frontal (null mientras se descarga). */
+  vinyl: CanvasImageSource | null;
   logo: LogoSource | null;
-  /** Tamaño del logotipo: fracción (0–1) del área útil de la tarjeta. */
+  /** Tamaño del logotipo: fracción (0–1) de la zona «TU LOGO». */
   size: number;
+  position: LogoPosition;
   finish: StandFinish;
 };
+
+/*
+ * Vinilo oficial: imagen plana de la cara frontal (proporción 3:4, fondo blanco puro).
+ * Las zonas se expresan en fracciones de la cara, así valen para cualquier resolución.
+ */
+/** Zona «TU LOGO»: el logotipo del cliente nunca sale de aquí. */
+export const LOGO_ZONE = { x: 0.1, y: 0.115, w: 0.8, h: 0.42 };
+/** Área que se cubre de blanco para ocultar el texto de ejemplo «TU LOGO». */
+const PLACEHOLDER_AREA = { x: 0.08, y: 0.1, w: 0.84, h: 0.455 };
+const VINYL_WHITE = "#ffffff";
+
+let vinylRequest: Promise<HTMLImageElement> | null = null;
+
+/** Descarga (una sola vez) la imagen del vinilo. */
+export function loadVinyl() {
+  vinylRequest ??= new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve(image);
+    image.onerror = () => {
+      vinylRequest = null;
+      reject(new Error("No se ha podido cargar el vinilo"));
+    };
+    image.src = vinylAsset.src;
+  });
+  return vinylRequest;
+}
 
 /* Geometría (en unidades de la escena) */
 const HORIZON_Y = 735;
@@ -36,8 +74,6 @@ const PANEL_X = (SCENE_W - PANEL_W) / 2;
 const PANEL_Y = 147;
 const PANEL_R = 30;
 const THICKNESS = { x: 9, y: 7 };
-/** Margen interior de la cara frontal que el logotipo nunca invade. */
-export const SAFE_INSET = 0.11;
 
 /* Luces desenfocadas del fondo (posiciones fijas para que la escena sea estable). */
 const BOKEH: { x: number; y: number; r: number; rgb: string; a: number }[] = [
@@ -195,8 +231,8 @@ function frontFacePath(ctx: CanvasRenderingContext2D) {
   roundedRect(ctx, PANEL_X, PANEL_Y, PANEL_W, PANEL_H, PANEL_R);
 }
 
-function drawPanel(ctx: CanvasRenderingContext2D, finish: StandFinish) {
-  const white = finish === "blanco";
+function drawPanel(ctx: CanvasRenderingContext2D, options: SceneOptions) {
+  const white = options.finish === "blanco";
 
   // Grosor del panel (canto visible a la derecha y abajo)
   roundedRect(ctx, PANEL_X + THICKNESS.x, PANEL_Y + THICKNESS.y, PANEL_W, PANEL_H, PANEL_R);
@@ -206,20 +242,19 @@ function drawPanel(ctx: CanvasRenderingContext2D, finish: StandFinish) {
   ctx.fillStyle = slab;
   ctx.fill();
 
-  // Cara frontal
+  // Cara frontal: el vinilo con el logotipo del cliente
+  ctx.save();
   frontFacePath(ctx);
-  const face = ctx.createLinearGradient(0, PANEL_Y, 0, PANEL_Y + PANEL_H);
-  face.addColorStop(0, white ? "#ffffff" : "#181c25");
-  face.addColorStop(1, white ? "#eef2f8" : "#090b10");
-  ctx.fillStyle = face;
-  ctx.fill();
+  ctx.clip();
+  drawFace(ctx, PANEL_X, PANEL_Y, PANEL_W, PANEL_H, options);
 
   // Sombreado lateral muy suave para dar volumen
   const side = ctx.createLinearGradient(PANEL_X, 0, PANEL_X + PANEL_W, 0);
-  side.addColorStop(0, white ? "rgba(10,20,40,0)" : "rgba(255,255,255,0.03)");
-  side.addColorStop(1, white ? "rgba(10,20,40,0.05)" : "rgba(0,0,0,0.12)");
+  side.addColorStop(0, "rgba(10,20,40,0)");
+  side.addColorStop(1, "rgba(10,20,40,0.05)");
   ctx.fillStyle = side;
-  ctx.fill();
+  ctx.fillRect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H);
+  ctx.restore();
 }
 
 /** Brillo del metacrilato y arista iluminada, por encima del logotipo. */
@@ -247,22 +282,54 @@ function drawGloss(ctx: CanvasRenderingContext2D, finish: StandFinish) {
 }
 
 /**
- * Encaja el logotipo dentro de una cara de tarjeta de `boxW`×`boxH`:
- * centrado, sin deformar y respetando el margen interior.
+ * Encaja el logotipo en la zona «TU LOGO» de una cara de `faceW`×`faceH`:
+ * sin deformar y sin salirse nunca de la zona. La posición reparte el
+ * espacio libre (0 = centrado; -1/1 = pegado a un borde de la zona).
  */
-export function fitLogo(logo: LogoSource, size: number, boxW: number, boxH: number) {
-  const usableW = boxW * (1 - SAFE_INSET * 2);
-  const usableH = boxH * (1 - SAFE_INSET * 2);
-  const scale = Math.min((usableW * size) / logo.sw, (usableH * size) / logo.sh);
+export function fitLogo(logo: LogoSource, size: number, position: LogoPosition, faceW: number, faceH: number) {
+  const zoneW = LOGO_ZONE.w * faceW;
+  const zoneH = LOGO_ZONE.h * faceH;
+  const scale = Math.min((zoneW * size) / logo.sw, (zoneH * size) / logo.sh);
   const w = logo.sw * scale;
   const h = logo.sh * scale;
-  return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h };
+  return {
+    x: LOGO_ZONE.x * faceW + ((zoneW - w) / 2) * (1 + position.x),
+    y: LOGO_ZONE.y * faceH + ((zoneH - h) / 2) * (1 + position.y),
+    w,
+    h,
+  };
 }
 
-/** Calcula dónde se dibuja el logotipo en la escena 2D: centrado y sin deformar. */
-export function logoRect(logo: LogoSource, size: number) {
-  const r = fitLogo(logo, size, PANEL_W, PANEL_H);
-  return { x: PANEL_X + r.x, y: PANEL_Y + r.y, w: r.w, h: r.h };
+/** Indica en qué ejes queda hueco para mover el logotipo con el tamaño actual. */
+export function logoCanMove(logo: LogoSource, size: number) {
+  const r = fitLogo(logo, size, CENTERED, 1000, 1000);
+  return { x: LOGO_ZONE.w * 1000 - r.w > 1, y: LOGO_ZONE.h * 1000 - r.h > 1 };
+}
+
+/**
+ * Pinta la cara frontal en el rectángulo indicado: el vinilo fijo y, si hay
+ * logotipo, este en lugar del texto de ejemplo «TU LOGO».
+ */
+export function drawFace(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  { vinyl, logo, size, position }: SceneOptions,
+) {
+  ctx.fillStyle = VINYL_WHITE;
+  ctx.fillRect(x, y, w, h);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  if (vinyl) ctx.drawImage(vinyl, x, y, w, h);
+  if (!logo) return;
+
+  // El logotipo sustituye al texto de ejemplo: se tapa con el blanco del vinilo
+  ctx.fillStyle = VINYL_WHITE;
+  ctx.fillRect(x + PLACEHOLDER_AREA.x * w, y + PLACEHOLDER_AREA.y * h, PLACEHOLDER_AREA.w * w, PLACEHOLDER_AREA.h * h);
+  const r = fitLogo(logo, size, position, w, h);
+  ctx.drawImage(logo.image, logo.sx, logo.sy, logo.sw, logo.sh, x + r.x, y + r.y, r.w, r.h);
 }
 
 /** Solo el fondo del estudio (pared, luces y mostrador), para la vista 3D. */
@@ -271,26 +338,12 @@ export function drawBackdrop(ctx: CanvasRenderingContext2D) {
   drawBackground(ctx);
 }
 
-/** Rectángulo de la cara frontal en unidades de la escena (para superponer ayudas en pantalla). */
-export const PANEL_RECT = { x: PANEL_X, y: PANEL_Y, w: PANEL_W, h: PANEL_H, r: PANEL_R };
-
-export function drawScene(ctx: CanvasRenderingContext2D, { logo, size, finish }: SceneOptions) {
+export function drawScene(ctx: CanvasRenderingContext2D, options: SceneOptions) {
+  const { finish } = options;
   ctx.clearRect(0, 0, SCENE_W, SCENE_H);
   drawBackground(ctx);
   drawShadowAndReflection(ctx, finish);
   drawBase(ctx, finish);
-  drawPanel(ctx, finish);
-
-  if (logo) {
-    const r = logoRect(logo, size);
-    ctx.save();
-    frontFacePath(ctx);
-    ctx.clip();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(logo.image, logo.sx, logo.sy, logo.sw, logo.sh, r.x, r.y, r.w, r.h);
-    ctx.restore();
-  }
-
+  drawPanel(ctx, options);
   drawGloss(ctx, finish);
 }

@@ -1,12 +1,21 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { SCENE_H, SCENE_W, drawBackdrop, fitLogo, type LogoSource, type StandFinish } from "@/lib/stand-scene";
+import {
+  CENTERED,
+  SCENE_H,
+  SCENE_W,
+  drawBackdrop,
+  drawFace,
+  type SceneOptions,
+  type StandFinish,
+} from "@/lib/stand-scene";
 
 /*
  * Visor 3D de la tarjeta NFC de sobremesa (Three.js).
- * - Tarjeta: sólido con grosor y cantos redondeados; la cara frontal lleva
- *   ÚNICAMENTE el logotipo del cliente, centrado (textura). La trasera es lisa.
+ * - Tarjeta: sólido con grosor y cantos redondeados; la cara frontal lleva el
+ *   vinilo fijo con el logotipo del cliente en la zona «TU LOGO» (textura).
+ *   La trasera es lisa.
  * - Soporte: base plana de metacrilato transparente; la tarjeta se apoya
  *   ligeramente inclinada hacia atrás, como en las fotos de los expositores.
  * - Solo se renderiza mientras hay movimiento (ahorra batería).
@@ -23,7 +32,6 @@ const FOOT = { w: CARD_W + 0.1, h: 0.03, d: 0.42, back: 0.08 };
 const CARD_Z = -0.05;
 
 const FACE_TEX = { w: 1024, h: 1366 };
-const FACE_COLORS: Record<StandFinish, string> = { blanco: "#f6f7fa", negro: "#0d0f14" };
 // El canto tiene un tono algo distinto de la cara, como el metacrilato real.
 const BODY_COLORS: Record<StandFinish, string> = { blanco: "#d6dce6", negro: "#1c2232" };
 
@@ -96,12 +104,13 @@ export class StandViewer {
     const room = new RoomEnvironment();
     this.envTexture = pmrem.fromScene(room, 0.04).texture;
     this.scene.environment = this.envTexture;
-    this.scene.environmentIntensity = 0.55;
+    // Luz total sobre la cara ≈ 1: así los colores del logotipo salen fieles.
+    this.scene.environmentIntensity = 0.35;
     room.dispose();
     pmrem.dispose();
 
     // Luces: principal con sombra, contraluz azul y relleno suave
-    const key = new THREE.DirectionalLight(0xffffff, 2.1);
+    const key = new THREE.DirectionalLight(0xffffff, 0.9);
     key.position.set(-2.2, 4.4, 3.4);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
@@ -116,7 +125,7 @@ export class StandViewer {
     key.shadow.radius = 5;
     const rim = new THREE.DirectionalLight(0x5b8cff, 1.6);
     rim.position.set(2.6, 2.2, -3.2);
-    const fill = new THREE.HemisphereLight(0xcfe0ff, 0x0a0f1f, 0.45);
+    const fill = new THREE.HemisphereLight(0xcfe0ff, 0x0a0f1f, 0.3);
     this.scene.add(key, rim, fill);
 
     // Suelo invisible que solo recibe la sombra
@@ -161,9 +170,9 @@ export class StandViewer {
     this.faceTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     this.faceMaterial = new THREE.MeshPhysicalMaterial({
       map: this.faceTexture,
-      roughness: 0.42,
-      clearcoat: 0.55,
-      clearcoatRoughness: 0.12,
+      roughness: 0.5,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.2,
       polygonOffset: true,
       polygonOffsetFactor: -1,
     });
@@ -216,7 +225,7 @@ export class StandViewer {
       this.envTexture,
     );
 
-    this.paintFace(null, 0.7, "blanco");
+    this.paintFace({ vinyl: null, logo: null, size: 1, position: CENTERED, finish: "blanco" });
     this.applyPose();
 
     // Interacción
@@ -227,8 +236,9 @@ export class StandViewer {
     canvas.addEventListener("keydown", this.onKeyDown);
     document.addEventListener("visibilitychange", this.onVisibility);
 
-    this.observer = new IntersectionObserver(([entry]) => {
-      this.visible = entry.isIntersecting;
+    // Si llegan varios avisos juntos (scroll rápido), el último es el estado actual.
+    this.observer = new IntersectionObserver((entries) => {
+      this.visible = entries[entries.length - 1].isIntersecting;
       if (this.visible) this.invalidate();
     });
     this.observer.observe(canvas);
@@ -238,10 +248,10 @@ export class StandViewer {
     this.resize();
   }
 
-  /** Actualiza logotipo, tamaño y acabado sin recrear la escena. */
-  setDesign(logo: LogoSource | null, size: number, finish: StandFinish) {
-    this.bodyMaterial.color.set(BODY_COLORS[finish]);
-    this.paintFace(logo, size, finish);
+  /** Actualiza vinilo, logotipo, tamaño, posición y acabado sin recrear la escena. */
+  setDesign(design: SceneOptions) {
+    this.bodyMaterial.color.set(BODY_COLORS[design.finish]);
+    this.paintFace(design);
     this.invalidate();
   }
 
@@ -300,17 +310,11 @@ export class StandViewer {
 
   /* ----------------------------------------------------------------------- */
 
-  private paintFace(logo: LogoSource | null, size: number, finish: StandFinish) {
+  /** La textura de la cara se pinta con el mismo código que la vista 2D. */
+  private paintFace(design: SceneOptions) {
     const ctx = this.faceCanvas.getContext("2d");
     if (!ctx) return;
-    ctx.fillStyle = FACE_COLORS[finish];
-    ctx.fillRect(0, 0, FACE_TEX.w, FACE_TEX.h);
-    if (logo) {
-      const r = fitLogo(logo, size, FACE_TEX.w, FACE_TEX.h);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(logo.image, logo.sx, logo.sy, logo.sw, logo.sh, r.x, r.y, r.w, r.h);
-    }
+    drawFace(ctx, 0, 0, FACE_TEX.w, FACE_TEX.h, design);
     this.faceTexture.needsUpdate = true;
   }
 

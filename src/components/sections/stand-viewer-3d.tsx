@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { StandViewer } from "@/lib/stand-3d";
-import type { LogoSource, StandFinish } from "@/lib/stand-scene";
+import type { SceneOptions } from "@/lib/stand-scene";
 
 export type StandViewerApi = {
   exportPNG: () => Promise<Blob | null>;
@@ -10,9 +10,8 @@ export type StandViewerApi = {
 };
 
 type Props = {
-  logo: LogoSource | null;
-  size: number;
-  finish: StandFinish;
+  /** Vinilo, logotipo, tamaño, posición y acabado de la tarjeta. */
+  design: SceneOptions;
   /** Recibe la API del visor cuando está listo (o null al desmontarse). */
   onReady: (api: StandViewerApi | null) => void;
   /** El navegador no admite WebGL: se mantiene la vista 2D. */
@@ -22,11 +21,11 @@ type Props = {
 };
 
 /** Lienzo 3D transparente que se superpone al fondo del estudio. */
-export function StandViewer3D({ logo, size, finish, onReady, onUnsupported, onInteract }: Props) {
+export function StandViewer3D({ design, onReady, onUnsupported, onInteract }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<StandViewer | null>(null);
   // Último diseño aplicado (por si el visor se vuelve a crear).
-  const designRef = useRef<{ logo: LogoSource | null; size: number; finish: StandFinish } | null>(null);
+  const designRef = useRef<SceneOptions | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -42,8 +41,7 @@ export function StandViewer3D({ logo, size, finish, onReady, onUnsupported, onIn
     }
     viewer.onInteract = onInteract;
     viewerRef.current = viewer;
-    const design = designRef.current;
-    if (design) viewer.setDesign(design.logo, design.size, design.finish);
+    if (designRef.current) viewer.setDesign(designRef.current);
     onReady({ exportPNG: () => viewer.exportPNG(), resetView: () => viewer.resetView() });
     return () => {
       onReady(null);
@@ -53,9 +51,9 @@ export function StandViewer3D({ logo, size, finish, onReady, onUnsupported, onIn
   }, [onReady, onUnsupported, onInteract]);
 
   useEffect(() => {
-    designRef.current = { logo, size, finish };
-    viewerRef.current?.setDesign(logo, size, finish);
-  }, [logo, size, finish]);
+    designRef.current = design;
+    viewerRef.current?.setDesign(design);
+  }, [design]);
 
   return (
     <canvas
@@ -63,7 +61,7 @@ export function StandViewer3D({ logo, size, finish, onReady, onUnsupported, onIn
       tabIndex={0}
       role="img"
       aria-label={
-        logo
+        design.logo
           ? "Vista 3D de tu tarjeta de sobremesa con tu logotipo. Arrastra o usa las flechas del teclado para girarla."
           : "Vista 3D de la tarjeta de sobremesa. Arrastra o usa las flechas del teclado para girarla."
       }

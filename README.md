@@ -37,6 +37,8 @@ Abre http://localhost:3000. Otros comandos: `npm run build` (compilación de pro
 | Colores y animaciones | `src/app/globals.css` (tokens `:root` y `.dark`) |
 | Textos legales (plantillas) | `src/app/aviso-legal`, `src/app/privacidad`, `src/app/cookies` |
 
+**Vinilo del personalizador:** la cara de la tarjeta usa `src/assets/personalizador/vinilo-resenas.webp` (1024 × 1366 px, proporción 3:4, fondo blanco puro). Si cambias el diseño, mantén esas medidas y revisa `LOGO_ZONE` en `src/lib/stand-scene.ts`, que marca la zona «TU LOGO» donde va el logotipo del cliente.
+
 **Añadir una foto:** guárdala en `src/assets/modelos/`, impórtala en `src/data/content.ts` y añádela a `gallery`. Para usarla en un producto, asígnala a su campo `photo`. Si la tarjeta personalizada no tiene `photo`, se muestra una ilustración orientativa.
 
 ### Calculadora y descuentos
